@@ -75,7 +75,7 @@ def root():
     return make_response('authcast v{}'.format(__version__))
 
 
-@app.route('/rss/')
+@app.route('/rss')
 def rss():
     required_params = [u'url', u'username', u'password']
     missing_params = filter(lambda p: not request.args.get(p), required_params)
