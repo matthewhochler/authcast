@@ -73,6 +73,15 @@ def add_content_headers(resp_to, resp_from):
             resp_to.headers[key.title()] = resp_from.headers[key]
 
 
+def handle_error(opener, req):
+    """ Catch and return errors """
+    try:
+        resp = opener.open(req)
+    except urllib2.HTTPError, exc:
+        return (True, exc)
+    return (not str(resp.code).startswith('2'), resp)
+
+
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
@@ -96,11 +105,15 @@ def file_():
         file_request = urllib2.Request(data['url'], headers={
             'Range': request.headers['range'],
         })
-        file_response = opener.open(file_request)
+        is_error, file_response = handle_error(opener, file_request)
+        if is_error:
+            return make_response(file_response.read(), file_response.code)
         response = send_file(file_response, add_etags=False)
         response.status_code = 206
     else:
-        file_response = opener.open(data['url'])
+        is_error, file_response = handle_error(opener, data['url'])
+        if is_error:
+            return make_response(file_response.read(), file_response.code)
         response = send_file(file_response, add_etags=False)
 
     add_content_headers(response, file_response)
@@ -119,12 +132,10 @@ def feed():
 
     opener = content_auth.opener(data['url'])
     try:
-        feed_response = opener.open(data['url'])
+        is_error, feed_response = handle_error(opener, data['url'])
     except ValueError:
         return make_response('url invalid', 400)
-
-    # Return errors
-    if not str(feed_response.code).startswith('2'):
+    if is_error:
         return make_response(feed_response.read(), feed_response.code)
 
     # Verify content is XML
