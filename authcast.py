@@ -1,3 +1,4 @@
+from tempfile import NamedTemporaryFile
 import urllib
 import urllib2
 from xml.etree import ElementTree
@@ -34,16 +35,20 @@ class ContentAuth(object):
         manager.add_password(None, url, self.username, self.password)
         return urllib2.build_opener(urllib2.HTTPBasicAuthHandler(manager))
 
-    def xml(self, xml_str, namespaces=None):
+    def xml(self, file_obj, namespaces=None):
         if namespaces:
             for namespace, url in namespaces.iteritems():
                 ElementTree.register_namespace(namespace, url)
-        xml_element = ElementTree.fromstring(xml_str)
+        xml = ElementTree.ElementTree(file=file_obj)
 
-        enclosures = xml_element.findall('.//enclosure')
+        enclosures = xml.findall('.//enclosure')
         for enclosure in enclosures:
             enclosure.attrib['url'] = self.file_url(enclosure.attrib['url'])
-        return ElementTree.tostring(xml_element)
+
+        file_obj = NamedTemporaryFile(suffix='.xml')
+        xml.write(file_obj)
+        file_obj.seek(0)
+        return file_obj
 
 
 def validate_request():
@@ -69,6 +74,7 @@ def add_content_headers(resp_to, resp_from):
 
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 
 @app.route('/')
@@ -91,11 +97,11 @@ def file_():
             'Range': request.headers['range'],
         })
         file_response = opener.open(file_request)
-        response = send_file(file_response)
+        response = send_file(file_response, add_etags=False)
         response.status_code = 206
     else:
         file_response = opener.open(data['url'])
-        response = send_file(file_response)
+        response = send_file(file_response, add_etags=False)
 
     add_content_headers(response, file_response)
     response.headers['Accept-Ranges'] = 'bytes'
@@ -127,9 +133,8 @@ def feed():
         feed_response.close()
         return make_response('invalid content type: ' + content_type, 415)
 
-    xml = content_auth.xml(feed_response.read(), namespaces=RSS_NAMESPACES)
-    response = make_response(xml)
-    add_content_headers(response, feed_response)
+    xml = content_auth.xml(feed_response, namespaces=RSS_NAMESPACES)
+    response = send_file(xml.name, add_etags=False)
     return response
 
 
