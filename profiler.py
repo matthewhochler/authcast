@@ -1,3 +1,4 @@
+from gevent.wsgi import WSGIServer
 from werkzeug.contrib.profiler import ProfilerMiddleware
 
 from authcast import app
@@ -5,4 +6,5 @@ from authcast import app
 
 app.config['PROFILE'] = True
 app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30])
-app.run(debug=True)
+http_server = WSGIServer(('', 5000), app)
+http_server.serve_forever()
