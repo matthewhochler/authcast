@@ -5,7 +5,7 @@ from xml.etree import ElementTree
 from flask import Flask, make_response, request, send_file
 
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 RSS_NAMESPACES = {
@@ -54,6 +54,14 @@ def validate_request():
     return True
 
 
+def clean_request():
+    data = request.args.copy()
+    # Unquote URL if double quoted
+    if ':' not in data['url'] and '%' in data['url']:
+        data['url'] = urllib.unquote(data['url'])
+    return data
+
+
 def add_content_headers(resp_to, resp_from):
     for key in resp_from.headers:
         if key.lower().startswith('content-'):
@@ -73,22 +81,20 @@ def file_():
     is_valid = validate_request()
     if is_valid is not True:
         return make_response(is_valid, 400)
+    data = clean_request()
 
-    username = request.args['username']
-    password = request.args['password']
-    url = request.args['url']
-    content_auth = ContentAuth(username, password)
+    content_auth = ContentAuth(data['username'], data['password'])
 
-    opener = content_auth.opener(url)
+    opener = content_auth.opener(data['url'])
     if 'range' in request.headers:
-        file_request = urllib2.Request(url, headers={
+        file_request = urllib2.Request(data['url'], headers={
             'Range': request.headers['range'],
         })
         file_response = opener.open(file_request)
         response = send_file(file_response)
         response.status_code = 206
     else:
-        file_response = opener.open(url)
+        file_response = opener.open(data['url'])
         response = send_file(file_response)
 
     add_content_headers(response, file_response)
@@ -101,15 +107,13 @@ def feed():
     is_valid = validate_request()
     if is_valid is not True:
         return make_response(is_valid, 400)
+    data = clean_request()
 
-    username = request.args['username']
-    password = request.args['password']
-    url = request.args['url']
-    content_auth = ContentAuth(username, password)
+    content_auth = ContentAuth(data['username'], data['password'])
 
-    opener = content_auth.opener(url)
+    opener = content_auth.opener(data['url'])
     try:
-        feed_response = opener.open(url)
+        feed_response = opener.open(data['url'])
     except ValueError:
         return make_response('url invalid', 400)
 
